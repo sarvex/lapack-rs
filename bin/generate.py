@@ -11,9 +11,10 @@ select_re = re.compile('LAPACK_(\w)_SELECT(\d)')
 
 
 def is_scalar(name, cty, f):
-    return ( \
-        'c_char' in cty or
-        name in [
+    return (
+        'c_char' in cty
+        or name
+        in [
             'abnrm',
             'abstol',
             'amax',
@@ -43,48 +44,44 @@ def is_scalar(name, cty, f):
             'sdim',
             'tryrac',
             'vu',
-        ] or
-        name in [
+        ]
+        or name
+        in [
             'alpha',
-        ] and (
-            'larfg' in f.name
-        ) or
-        name in [
+        ]
+        and ('larfg' in f.name)
+        or name
+        in [
             'dif',
-        ] and not (
-            'tgsen' in f.name or
-            'tgsna' in f.name
-        ) or
-        name in [
+        ]
+        and not ('tgsen' in f.name or 'tgsna' in f.name)
+        or name
+        in [
             'p',
-        ] and not (
-            'tgevc' in f.name
-        ) or
-        name in [
-            'q'
-        ] and (
-            'lapack_int' in cty
-        ) or
-        name in [
+        ]
+        and 'tgevc' not in f.name
+        or name in ['q']
+        and ('lapack_int' in cty)
+        or name
+        in [
             'vl',
             'vr',
-        ] and not (
-            'geev' in f.name or
-            'ggev' in f.name or
-            'hsein' in f.name or
-            'tgevc' in f.name or
-            'tgsna' in f.name or
-            'trevc' in f.name or
-            'trsna' in f.name
-        ) or
-        name.startswith('k') and not (
-            'lapmr' in f.name or
-            'lapmt' in f.name
-        ) or
-        name.startswith('inc') or
-        name.startswith('ld') or
-        name.startswith('tol') or
-        name.startswith('vers')
+        ]
+        and not (
+            'geev' in f.name
+            or 'ggev' in f.name
+            or 'hsein' in f.name
+            or 'tgevc' in f.name
+            or 'tgsna' in f.name
+            or 'trevc' in f.name
+            or 'trsna' in f.name
+        )
+        or name.startswith('k')
+        and not ('lapmr' in f.name or 'lapmt' in f.name)
+        or name.startswith('inc')
+        or name.startswith('ld')
+        or name.startswith('tol')
+        or name.startswith('vers')
     )
 
 
@@ -114,97 +111,89 @@ def translate_base_type(cty):
     elif 'size_t' in cty:
         return 'size_t'
 
-    assert False, 'cannot translate `{}`'.format(cty)
+    assert False, f'cannot translate `{cty}`'
 
 
 def translate_signature_type(name, cty, f):
     m = select_re.match(cty)
     if m is not None:
         if m.group(1) == 'S':
-            return 'Select{}F32'.format(m.group(2))
+            return f'Select{m.group(2)}F32'
         elif m.group(1) == 'D':
-            return 'Select{}F64'.format(m.group(2))
+            return f'Select{m.group(2)}F64'
         elif m.group(1) == 'C':
-            return 'Select{}C32'.format(m.group(2))
+            return f'Select{m.group(2)}C32'
         elif m.group(1) == 'Z':
-            return 'Select{}C64'.format(m.group(2))
+            return f'Select{m.group(2)}C64'
 
     base = translate_base_type(cty)
     if '*const' in cty:
-        if is_scalar(name, cty, f):
-            return base
-        else:
-            return '&[{}]'.format(base)
+        return base if is_scalar(name, cty, f) else f'&[{base}]'
     elif '*mut' in cty:
-        if is_scalar(name, cty, f):
-            return '&mut {}'.format(base)
-        else:
-            return '&mut [{}]'.format(base)
-
+        return f'&mut {base}' if is_scalar(name, cty, f) else f'&mut [{base}]'
     return base
 
 
 def translate_body_argument(name, rty):
     if rty.startswith('Select'):
-        return 'transmute({})'.format(name)
+        return f'transmute({name})'
 
     if rty == 'u8':
-        return '&({} as c_char)'.format(name)
+        return f'&({name} as c_char)'
     elif rty == '&mut u8':
-        return '{} as *mut _ as *mut _'.format(name)
+        return f'{name} as *mut _ as *mut _'
 
     elif rty == 'i32':
-        return '&{}'.format(name)
+        return f'&{name}'
     elif rty == '&mut i32':
         return name
     elif rty == '&[i32]':
-        return '{}.as_ptr()'.format(name)
+        return f'{name}.as_ptr()'
     elif rty == '&mut [i32]':
-        return '{}.as_mut_ptr()'.format(name)
+        return f'{name}.as_mut_ptr()'
 
     elif rty.startswith('f'):
-        return '&{}'.format(name)
+        return f'&{name}'
     elif rty.startswith('&mut f'):
         return name
     elif rty.startswith('&[f'):
-        return '{}.as_ptr()'.format(name)
+        return f'{name}.as_ptr()'
     elif rty.startswith('&mut [f'):
-        return '{}.as_mut_ptr()'.format(name)
+        return f'{name}.as_mut_ptr()'
 
     elif rty.startswith('c'):
-        return '&{} as *const _ as *const _'.format(name)
+        return f'&{name} as *const _ as *const _'
     elif rty.startswith('&mut c'):
-        return '{} as *mut _ as *mut _'.format(name)
+        return f'{name} as *mut _ as *mut _'
     elif rty.startswith('&[c'):
-        return '{}.as_ptr() as *const _'.format(name)
+        return f'{name}.as_ptr() as *const _'
     elif rty.startswith('&mut [c'):
-        return '{}.as_mut_ptr() as *mut _'.format(name)
+        return f'{name}.as_mut_ptr() as *mut _'
 
     elif rty == 'size_t':
         return name
 
-    assert False, 'cannot translate `{}: {}`'.format(name, rty)
+    assert False, f'cannot translate `{name}: {rty}`'
 
 
 def format_signature(f):
     args = format_signature_arguments(f)
     if f.ret is None:
-        return 'pub unsafe fn {}({})'.format(f.name, args)
+        return f'pub unsafe fn {f.name}({args})'
     else:
-        return 'pub unsafe fn {}({}) -> {}'.format(f.name, args,
-                                                   translate_base_type(f.ret))
+        return f'pub unsafe fn {f.name}({args}) -> {translate_base_type(f.ret)}'
 
 
 def format_signature_arguments(f):
     s = []
     for name, cty in f.args:
         name = translate_name(name)
-        s.append('{}: {}'.format(name, translate_signature_type(name, cty, f)))
+        s.append(f'{name}: {translate_signature_type(name, cty, f)}')
     return ', '.join(s)
 
 
 def format_body(f):
-    return 'ffi::{}_({})'.format(f.name, format_body_arguments(f))
+    return f'ffi::{f.name}_({format_body_arguments(f)})'
 
 
 def format_body_arguments(f):
@@ -230,7 +219,7 @@ def write(functions):
             continue
         print('\n#[inline]')
         print(format_signature(f) + ' {')
-        print('    ' + format_body(f) + '\n}')
+        print(f'    {format_body(f)}' + '\n}')
 
 
 if __name__ == '__main__':

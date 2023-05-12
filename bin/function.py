@@ -48,9 +48,7 @@ def pull_name(s):
 
 def pull_return(s):
     match = return_re.match(s)
-    if match is None:
-        return None, s
-    return match.group(1), s[match.end(1):]
+    return (None, s) if match is None else (match.group(1), s[match.end(1):])
 
 
 def read(path):
